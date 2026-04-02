@@ -1,0 +1,28 @@
+From: security-team@company.com
+Subject: [ALERT] Suspicious Email Detected — Possible Phishing Campaign
+
+Alert ID: PHI-2026-0401-001
+Timestamp: 2026-04-01T08:23:17Z
+Source: Email Security Gateway (Proofpoint)
+Severity: HIGH
+
+Details:
+Multiple employees in the Finance department received emails from "accounts-payable@ch4se-bank.com"
+with subject "Urgent: Wire Transfer Confirmation Required - Invoice #INV-98234"
+
+Affected Users:
+- jsmith@company.com (opened email, clicked link)
+- mjones@company.com (opened email)
+- klee@company.com (email quarantined)
+
+Email Headers:
+Return-Path: <bounce-7721@mail.suspicious-sender.ru>
+Received: from mail.suspicious-sender.ru (185.234.72.19)
+X-Mailer: PHPMailer 6.1.4
+Reply-To: urgent-reply@protonmail.com
+
+Embedded URL: hxxps://ch4se-bank-secure[.]com/verify?token=a8f3e2d1
+URL redirects to: hxxps://185.234.72.19/harvest/login.php
+
+Attachment: Wire_Transfer_Details.pdf.exe
+SHA256: 3a7b9f2e8d1c4b6a5e0f7d8c9b2a1e3f4d5c6b7a8e9f0d1c2b3a4e5f6d7c8b9a

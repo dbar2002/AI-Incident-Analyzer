@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+    <h1>Security Incident <span class="accent">Analyzer</span></h1>
+    <p class="hero-sub">Paste raw security logs or alerts. AI classifies the incident, extracts IOCs, and maps to MITRE ATT&CK.</p>
+</section>
+
+<section class="analyzer-section">
+    <div class="input-panel">
+        <div class="panel-header">
+            <h2>Log Input</h2>
+            <div class="sample-buttons">
+                <button class="btn btn-sm btn-ghost" onclick="loadSample('phishing')">Phishing</button>
+                <button class="btn btn-sm btn-ghost" onclick="loadSample('bruteforce')">Brute Force</button>
+                <button class="btn btn-sm btn-ghost" onclick="loadSample('malware')">Malware</button>
+            </div>
+        </div>
+        <textarea
+            id="log-input"
+            placeholder="Paste your security logs, SIEM alerts, or incident data here..."
+            spellcheck="false"
+        ></textarea>
+        <div class="input-actions">
+            <span class="char-count" id="char-count">0 / 50,000</span>
+            <button class="btn btn-primary" id="analyze-btn" onclick="runAnalysis()">
+                <span class="btn-text">Analyze</span>
+                <span class="btn-loader" style="display:none;">
+                    <span class="spinner"></span> Analyzing...
+                </span>
+            </button>
+        </div>
+    </div>
+
+    <div class="results-panel" id="results-panel" style="display:none;">
+        <!-- Classification Card -->
+        <div class="result-card classification-card" id="classification-card">
+            <div class="card-header">
+                <h3>Classification</h3>
+                <span class="severity-badge" id="severity-badge">—</span>
+            </div>
+            <div class="card-body">
+                <div class="classification-grid">
+                    <div class="field">
+                        <label>Incident Type</label>
+                        <span id="incident-type" class="field-value">—</span>
+                    </div>
+                    <div class="field">
+                        <label>Confidence</label>
+                        <div class="confidence-bar-wrap">
+                            <div class="confidence-bar" id="confidence-bar"></div>
+                            <span id="confidence-pct">—</span>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label>Attack Vector</label>
+                        <span id="attack-vector" class="field-value">—</span>
+                    </div>
+                    <div class="field">
+                        <label>Analysis Time</label>
+                        <span id="analysis-time" class="field-value">—</span>
+                    </div>
+                </div>
+                <div class="field full-width">
+                    <label>Summary</label>
+                    <p id="summary" class="summary-text">—</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- IOC Card -->
+        <div class="result-card ioc-card" id="ioc-card">
+            <div class="card-header">
+                <h3>Indicators of Compromise</h3>
+                <span class="ioc-count" id="ioc-total">0 IOCs</span>
+            </div>
+            <div class="card-body" id="ioc-body">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- CVE Details Card -->
+        <div class="result-card cve-card" id="cve-card" style="display:none;">
+            <div class="card-header">
+                <h3>CVE Analysis</h3>
+                <span class="cve-count" id="cve-total">0 CVEs</span>
+            </div>
+            <div class="card-body" id="cve-body">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- CVE-IOC Correlation Card -->
+        <div class="result-card correlation-card" id="correlation-card" style="display:none;">
+            <div class="card-header">
+                <h3>CVE–IOC Correlation</h3>
+                <span class="correlation-count" id="correlation-total">0 links</span>
+            </div>
+            <div class="card-body">
+                <p class="correlation-summary" id="correlation-summary"></p>
+                <div id="correlation-body">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- MITRE Card -->
+        <div class="result-card mitre-card" id="mitre-card">
+            <div class="card-header">
+                <h3>MITRE ATT&CK Mapping</h3>
+            </div>
+            <div class="card-body">
+                <div class="mitre-grid">
+                    <div class="field">
+                        <label>Tactics</label>
+                        <div id="mitre-tactics" class="tag-list">—</div>
+                    </div>
+                    <div class="field">
+                        <label>Techniques</label>
+                        <div id="mitre-techniques" class="tag-list">—</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Affected Assets Card -->
+        <div class="result-card assets-card" id="assets-card">
+            <div class="card-header">
+                <h3>Affected Assets</h3>
+            </div>
+            <div class="card-body">
+                <div id="affected-assets" class="tag-list">—</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error display -->
+    <div class="error-banner" id="error-banner" style="display:none;">
+        <span class="error-icon">⚠</span>
+        <span id="error-message"></span>
+    </div>
+</section>
+{% endblock %}
