@@ -65,6 +65,14 @@ async def index(request: Request):
     })
 
 
+@app.get("/history")
+async def history_page(request: Request):
+    """Incident history page."""
+    return templates.TemplateResponse("history.html", {
+        "request": request,
+    })
+
+
 @app.on_event("startup")
 async def startup():
     logger.info("=" * 60)

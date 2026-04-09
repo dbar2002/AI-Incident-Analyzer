@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Incident History — AI Incident Analyzer{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <h1>Incident <span class="accent">History</span></h1>
+    <p class="hero-sub">Browse past analyses. Click any incident to view the full report.</p>
+</section>
+
+<section class="history-section">
+    <div class="history-controls">
+        <span class="history-count" id="history-count">Loading...</span>
+        <button class="btn btn-sm btn-ghost" onclick="loadHistory()">Refresh</button>
+    </div>
+
+    <div class="history-table-wrap" id="history-table-wrap">
+        <table class="history-table" id="history-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Type</th>
+                    <th>Severity</th>
+                    <th>Confidence</th>
+                    <th>IOCs</th>
+                    <th>Summary</th>
+                    <th>Duration</th>
+                </tr>
+            </thead>
+            <tbody id="history-body">
+                <!-- Populated by JS -->
+            </tbody>
+        </table>
+    </div>
+
+    <div class="history-empty" id="history-empty" style="display:none;">
+        <p>No incidents analyzed yet.</p>
+        <a href="/" class="btn btn-primary">Analyze Your First Incident</a>
+    </div>
+</section>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="detail-modal" style="display:none;" onclick="closeModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3 id="modal-title">Incident Details</h3>
+            <button class="btn btn-sm btn-ghost" onclick="document.getElementById('detail-modal').style.display='none'">✕</button>
+        </div>
+        <div class="modal-body" id="modal-body">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/history.js"></script>
+{% endblock %}

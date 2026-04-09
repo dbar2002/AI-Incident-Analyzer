@@ -224,6 +224,12 @@ function renderResults(data) {
     // CVE-IOC Correlations
     renderCorrelations(data.cve_correlations);
 
+    // Timeline
+    renderTimeline(data.timeline);
+
+    // Response Playbook
+    renderPlaybook(data.playbook);
+
     // Scroll to results
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -442,6 +448,133 @@ function renderCorrelations(correlationData) {
         group.appendChild(table);
         body.appendChild(group);
     }
+}
+
+
+// --- Render incident timeline ---
+function renderTimeline(timeline) {
+    const card = document.getElementById('timeline-card');
+    const events = document.getElementById('timeline-events');
+    const narrative = document.getElementById('timeline-narrative');
+
+    if (!timeline || !timeline.events || timeline.events.length === 0) {
+        card.style.display = 'none';
+        return;
+    }
+
+    card.style.display = 'block';
+    document.getElementById('timeline-count').textContent = `${timeline.events.length} event${timeline.events.length !== 1 ? 's' : ''}`;
+    narrative.textContent = timeline.narrative || '';
+    events.innerHTML = '';
+
+    const typeIcons = {
+        reconnaissance: '🔍',
+        delivery: '📧',
+        exploitation: '💥',
+        installation: '📦',
+        c2: '📡',
+        action: '🎯',
+        detection: '🚨',
+        containment: '🛡️',
+    };
+
+    for (const evt of timeline.events) {
+        const div = document.createElement('div');
+        div.className = `tl-event tl-severity-${(evt.severity || 'INFO').toLowerCase()}`;
+
+        const icon = typeIcons[evt.event_type] || '•';
+
+        div.innerHTML = `
+            <div class="tl-marker">
+                <span class="tl-icon">${icon}</span>
+                <div class="tl-line"></div>
+            </div>
+            <div class="tl-content">
+                <div class="tl-header">
+                    <span class="tl-timestamp">${escapeHtml(evt.timestamp || 'Unknown')}</span>
+                    <span class="tl-type tag">${escapeHtml(evt.event_type)}</span>
+                </div>
+                <p class="tl-description">${escapeHtml(evt.description)}</p>
+                ${evt.actor || evt.target ? `
+                <div class="tl-meta">
+                    ${evt.actor ? `<span class="tl-actor">Actor: <strong>${escapeHtml(evt.actor)}</strong></span>` : ''}
+                    ${evt.target ? `<span class="tl-target">Target: <strong>${escapeHtml(evt.target)}</strong></span>` : ''}
+                </div>` : ''}
+            </div>
+        `;
+        events.appendChild(div);
+    }
+}
+
+
+// --- Render response playbook ---
+function renderPlaybook(playbook) {
+    const card = document.getElementById('playbook-card');
+    const stepsEl = document.getElementById('playbook-steps');
+    const strategyEl = document.getElementById('playbook-strategy');
+    const notesEl = document.getElementById('playbook-notes');
+
+    if (!playbook || !playbook.steps || playbook.steps.length === 0) {
+        card.style.display = 'none';
+        return;
+    }
+
+    card.style.display = 'block';
+    stepsEl.innerHTML = '';
+
+    // Containment strategy
+    if (playbook.containment_strategy) {
+        strategyEl.innerHTML = `
+            <div class="pb-strategy">
+                <label>Containment Strategy</label>
+                <p>${escapeHtml(playbook.containment_strategy)}</p>
+            </div>`;
+    } else {
+        strategyEl.innerHTML = '';
+    }
+
+    // Group steps by NIST phase
+    const phases = {};
+    const phaseOrder = ['Detection & Analysis', 'Containment', 'Eradication', 'Recovery', 'Post-Incident'];
+    for (const step of playbook.steps) {
+        if (!phases[step.phase]) phases[step.phase] = [];
+        phases[step.phase].push(step);
+    }
+
+    for (const phase of phaseOrder) {
+        if (!phases[phase]) continue;
+        const group = document.createElement('div');
+        group.className = 'pb-phase';
+
+        group.innerHTML = `<div class="pb-phase-label">${escapeHtml(phase)}</div>`;
+
+        for (const step of phases[phase]) {
+            const prioClass = step.priority.toLowerCase().replace('_', '-');
+            const stepDiv = document.createElement('div');
+            stepDiv.className = 'pb-step';
+            stepDiv.innerHTML = `
+                <div class="pb-step-header">
+                    <span class="pb-action">${escapeHtml(step.action)}</span>
+                    <span class="pb-priority pb-prio-${prioClass}">${escapeHtml(step.priority.replace('_', ' '))}</span>
+                </div>
+                <p class="pb-details">${escapeHtml(step.details)}</p>
+                <span class="pb-responsible">${escapeHtml(step.responsible)}</span>
+            `;
+            group.appendChild(stepDiv);
+        }
+
+        stepsEl.appendChild(group);
+    }
+
+    // Eradication & recovery notes
+    let notesHtml = '';
+    if (playbook.eradication_notes) {
+        notesHtml += `<div class="pb-note"><label>Eradication Notes</label><p>${escapeHtml(playbook.eradication_notes)}</p></div>`;
+    }
+    if (playbook.recovery_notes) {
+        notesHtml += `<div class="pb-note"><label>Recovery Notes</label><p>${escapeHtml(playbook.recovery_notes)}</p></div>`;
+    }
+    notesEl.innerHTML = notesHtml;
 }
 
 

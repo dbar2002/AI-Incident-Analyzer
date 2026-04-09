@@ -7,6 +7,7 @@ from datetime import datetime
 from .ioc import IOCCollection
 from .cve import CVEDetail
 from .correlation import CorrelationResult
+from .timeline import Timeline, ResponsePlaybook
 
 
 class AnalysisRequest(BaseModel):
@@ -35,5 +36,7 @@ class AnalysisResponse(BaseModel):
     iocs: IOCCollection
     cve_details: list[CVEDetail] = []
     cve_correlations: Optional[CorrelationResult] = None
+    timeline: Optional[Timeline] = None
+    playbook: Optional[ResponsePlaybook] = None
     raw_input: str
     analysis_duration_ms: int

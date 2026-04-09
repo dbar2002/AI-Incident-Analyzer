@@ -132,6 +132,35 @@
                 <div id="affected-assets" class="tag-list">—</div>
             </div>
         </div>
+
+        <!-- Timeline Card -->
+        <div class="result-card timeline-card" id="timeline-card" style="display:none;">
+            <div class="card-header">
+                <h3>Incident Timeline</h3>
+                <span class="timeline-count" id="timeline-count">0 events</span>
+            </div>
+            <div class="card-body">
+                <p class="timeline-narrative" id="timeline-narrative"></p>
+                <div class="timeline-events" id="timeline-events">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Response Playbook Card -->
+        <div class="result-card playbook-card" id="playbook-card" style="display:none;">
+            <div class="card-header">
+                <h3>Response Playbook</h3>
+                <span class="playbook-label">NIST 800-61</span>
+            </div>
+            <div class="card-body">
+                <div class="playbook-strategy" id="playbook-strategy"></div>
+                <div class="playbook-steps" id="playbook-steps">
+                    <!-- Populated by JS -->
+                </div>
+                <div class="playbook-notes" id="playbook-notes"></div>
+            </div>
+        </div>
     </div>
 
     <!-- Error display -->

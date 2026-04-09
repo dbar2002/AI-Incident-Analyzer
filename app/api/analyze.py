@@ -15,9 +15,10 @@ from app.models import AnalysisRequest, AnalysisResponse
 from app.core.ioc_extractor import extract_iocs
 from app.core.log_parser import parse_logs
 from app.core.severity import calculate_severity_score
-from app.services.ai_analyzer import classify_incident
+from app.services.ai_analyzer import classify_incident, generate_timeline, generate_playbook
 from app.services.cve_lookup import lookup_cves
 from app.core.cve_correlator import correlate_cves_to_iocs
+from app.services.database import save_incident
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -78,7 +79,23 @@ async def analyze_logs(request: AnalysisRequest):
             cve_correlations = correlate_cves_to_iocs(cve_details, iocs, request.raw_logs)
             logger.info(f"CVE-IOC correlations: {cve_correlations.count}")
 
-        # Step 7: Build response
+        # Step 7: Generate incident timeline
+        timeline = await generate_timeline(
+            raw_logs=request.raw_logs,
+            classification=classification,
+            log_metadata=log_metadata,
+        )
+        logger.info(f"Timeline: {len(timeline.events)} events")
+
+        # Step 8: Generate response playbook
+        playbook = await generate_playbook(
+            classification=classification,
+            timeline=timeline,
+            iocs=iocs,
+        )
+        logger.info(f"Playbook: {len(playbook.steps)} steps")
+
+        # Step 9: Build response
         duration_ms = int((time.time() - start_time) * 1000)
 
         response = AnalysisResponse(
@@ -88,7 +105,9 @@ async def analyze_logs(request: AnalysisRequest):
             iocs=iocs,
             cve_details=cve_details,
             cve_correlations=cve_correlations,
-            raw_input=request.raw_logs[:2000],  # truncate for storage
+            timeline=timeline,
+            playbook=playbook,
+            raw_input=request.raw_logs[:2000],
             analysis_duration_ms=duration_ms,
         )
 
@@ -97,6 +116,10 @@ async def analyze_logs(request: AnalysisRequest):
             f"type={classification.incident_type}, "
             f"severity={classification.severity}"
         )
+
+        # Step 10: Save to history database
+        save_incident(response.model_dump())
+
         return response
 
     except HTTPException:

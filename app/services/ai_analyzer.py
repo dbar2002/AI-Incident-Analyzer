@@ -11,6 +11,7 @@ from anthropic import Anthropic
 from app.config import settings
 from app.models.incident import IncidentClassification
 from app.models.ioc import IOCCollection
+from app.models.timeline import Timeline, TimelineEvent, ResponsePlaybook, PlaybookStep
 
 logger = logging.getLogger(__name__)
 
@@ -160,4 +161,256 @@ def _mock_classification(raw_logs: str, iocs: IOCCollection) -> IncidentClassifi
         affected_assets=[],
         mitre_tactics=[],
         mitre_techniques=[],
+    )
+
+
+# ============================================================
+# Timeline Generation
+# ============================================================
+
+_TIMELINE_SYSTEM_PROMPT = """You are an expert Security Incident Response analyst.
+Given raw security logs and an incident classification, reconstruct a chronological timeline of events.
+
+You MUST respond with valid JSON only — no markdown, no explanation, no preamble.
+
+JSON schema:
+{
+    "events": [
+        {
+            "timestamp": "string — original timestamp from logs, or 'Unknown' if not available",
+            "description": "string — clear description of what happened",
+            "actor": "string or null — who/what performed the action (attacker IP, user, process)",
+            "target": "string or null — what was acted upon (server, user account, file)",
+            "event_type": "string — one of: reconnaissance, delivery, exploitation, installation, c2, action, detection, containment",
+            "severity": "string — CRITICAL, HIGH, MEDIUM, LOW, INFO"
+        }
+    ],
+    "narrative": "string — 3-5 sentence narrative describing the full attack flow from start to finish"
+}
+
+Guidelines:
+- Order events chronologically based on timestamps in the logs
+- Use the kill chain model: recon → delivery → exploitation → installation → C2 → actions on objective
+- Include both attacker actions AND defender detections/responses
+- If timestamps are missing, infer order from logical sequence
+- Keep descriptions concise but specific — include IPs, usernames, filenames when available
+- The narrative should read like a brief executive summary of the attack
+"""
+
+
+async def generate_timeline(
+    raw_logs: str,
+    classification: IncidentClassification,
+    log_metadata: dict,
+) -> Timeline:
+    """Generate an incident timeline from logs and classification."""
+    if not settings.is_api_configured:
+        return _mock_timeline(classification)
+
+    client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+
+    prompt = f"""Reconstruct a timeline for this security incident.
+
+--- CLASSIFICATION ---
+Type: {classification.incident_type}
+Severity: {classification.severity}
+Summary: {classification.summary}
+Attack Vector: {classification.attack_vector}
+
+--- RAW LOG DATA ---
+{raw_logs[:8000]}
+"""
+
+    try:
+        response = client.messages.create(
+            model=settings.AI_MODEL,
+            max_tokens=settings.AI_MAX_TOKENS,
+            system=_TIMELINE_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        raw_response = response.content[0].text.strip()
+        if raw_response.startswith("```"):
+            raw_response = raw_response.split("\n", 1)[1]
+            if raw_response.endswith("```"):
+                raw_response = raw_response[:-3]
+            raw_response = raw_response.strip()
+
+        data = json.loads(raw_response)
+        events = [TimelineEvent(**e) for e in data.get("events", [])]
+        return Timeline(events=events, narrative=data.get("narrative", ""))
+
+    except Exception as e:
+        logger.error(f"Timeline generation failed: {e}")
+        return _mock_timeline(classification)
+
+
+def _mock_timeline(classification: IncidentClassification) -> Timeline:
+    """Fallback timeline when AI is unavailable."""
+    return Timeline(
+        events=[
+            TimelineEvent(
+                timestamp="Unknown",
+                description=f"[MOCK] {classification.incident_type} incident detected",
+                actor=None,
+                target=None,
+                event_type="detection",
+                severity=classification.severity,
+            )
+        ],
+        narrative=f"[MOCK — API key not configured] {classification.summary}",
+    )
+
+
+# ============================================================
+# Response Playbook Generation
+# ============================================================
+
+_PLAYBOOK_SYSTEM_PROMPT = """You are an expert Security Incident Response analyst specializing in NIST SP 800-61 Rev. 2 incident handling.
+Given an incident classification and timeline, generate a response playbook with specific, actionable steps.
+
+You MUST respond with valid JSON only — no markdown, no explanation, no preamble.
+
+JSON schema:
+{
+    "incident_type": "string",
+    "steps": [
+        {
+            "phase": "string — one of: Detection & Analysis, Containment, Eradication, Recovery, Post-Incident",
+            "action": "string — brief action title",
+            "priority": "string — IMMEDIATE, SHORT_TERM, LONG_TERM",
+            "details": "string — specific instructions for this step",
+            "responsible": "string — SOC Analyst, IR Lead, System Admin, Network Admin, Security Engineer, Management"
+        }
+    ],
+    "containment_strategy": "string — 2-3 sentence containment approach",
+    "eradication_notes": "string — key eradication considerations",
+    "recovery_notes": "string — recovery steps and validation"
+}
+
+Guidelines:
+- Steps MUST map to NIST 800-61 phases
+- Include at least 2 steps per phase
+- IMMEDIATE priority = do within first hour
+- SHORT_TERM priority = do within first 24 hours
+- LONG_TERM priority = do within first week
+- Be specific to THIS incident type — not generic advice
+- Include evidence preservation steps
+- Include communication/notification requirements
+- Reference specific IOCs from the incident where relevant
+"""
+
+
+async def generate_playbook(
+    classification: IncidentClassification,
+    timeline: Timeline,
+    iocs: IOCCollection,
+) -> ResponsePlaybook:
+    """Generate a NIST 800-61 response playbook."""
+    if not settings.is_api_configured:
+        return _mock_playbook(classification)
+
+    client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+
+    ioc_summary = []
+    if iocs.ip_addresses:
+        ioc_summary.append(f"IPs: {', '.join(i.value for i in iocs.ip_addresses[:5])}")
+    if iocs.domains:
+        ioc_summary.append(f"Domains: {', '.join(i.value for i in iocs.domains[:5])}")
+    if iocs.hashes:
+        ioc_summary.append(f"Hashes: {', '.join(i.value for i in iocs.hashes[:3])}")
+    if iocs.emails:
+        ioc_summary.append(f"Emails: {', '.join(i.value for i in iocs.emails[:5])}")
+
+    prompt = f"""Generate a response playbook for this incident.
+
+--- CLASSIFICATION ---
+Type: {classification.incident_type}
+Severity: {classification.severity}
+Summary: {classification.summary}
+Attack Vector: {classification.attack_vector}
+Affected Assets: {', '.join(classification.affected_assets) or 'Unknown'}
+MITRE Techniques: {', '.join(classification.mitre_techniques) or 'None mapped'}
+
+--- TIMELINE NARRATIVE ---
+{timeline.narrative}
+
+--- KEY IOCs ---
+{chr(10).join(ioc_summary) if ioc_summary else 'No IOCs extracted'}
+"""
+
+    try:
+        response = client.messages.create(
+            model=settings.AI_MODEL,
+            max_tokens=settings.AI_MAX_TOKENS,
+            system=_PLAYBOOK_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        raw_response = response.content[0].text.strip()
+        if raw_response.startswith("```"):
+            raw_response = raw_response.split("\n", 1)[1]
+            if raw_response.endswith("```"):
+                raw_response = raw_response[:-3]
+            raw_response = raw_response.strip()
+
+        data = json.loads(raw_response)
+        steps = [PlaybookStep(**s) for s in data.get("steps", [])]
+        return ResponsePlaybook(
+            incident_type=data.get("incident_type", classification.incident_type),
+            steps=steps,
+            containment_strategy=data.get("containment_strategy", ""),
+            eradication_notes=data.get("eradication_notes", ""),
+            recovery_notes=data.get("recovery_notes", ""),
+        )
+
+    except Exception as e:
+        logger.error(f"Playbook generation failed: {e}")
+        return _mock_playbook(classification)
+
+
+def _mock_playbook(classification: IncidentClassification) -> ResponsePlaybook:
+    """Fallback playbook when AI is unavailable."""
+    return ResponsePlaybook(
+        incident_type=classification.incident_type,
+        steps=[
+            PlaybookStep(
+                phase="Detection & Analysis",
+                action="Validate the alert",
+                priority="IMMEDIATE",
+                details=f"[MOCK] Confirm the {classification.incident_type} alert is a true positive. Review raw logs and extracted IOCs.",
+                responsible="SOC Analyst",
+            ),
+            PlaybookStep(
+                phase="Containment",
+                action="Isolate affected systems",
+                priority="IMMEDIATE",
+                details="[MOCK] Isolate any affected hosts from the network to prevent lateral movement.",
+                responsible="System Admin",
+            ),
+            PlaybookStep(
+                phase="Eradication",
+                action="Remove threat artifacts",
+                priority="SHORT_TERM",
+                details="[MOCK] Remove malicious files, revoke compromised credentials, and block malicious IPs/domains.",
+                responsible="Security Engineer",
+            ),
+            PlaybookStep(
+                phase="Recovery",
+                action="Restore normal operations",
+                priority="SHORT_TERM",
+                details="[MOCK] Restore systems from clean backups, re-enable accounts with new credentials, and validate integrity.",
+                responsible="System Admin",
+            ),
+            PlaybookStep(
+                phase="Post-Incident",
+                action="Conduct lessons learned",
+                priority="LONG_TERM",
+                details="[MOCK] Document the incident, update detection rules, and review response effectiveness.",
+                responsible="IR Lead",
+            ),
+        ],
+        containment_strategy="[MOCK] Configure your Anthropic API key for tailored containment recommendations.",
+        eradication_notes="[MOCK] Configure your Anthropic API key for specific eradication guidance.",
+        recovery_notes="[MOCK] Configure your Anthropic API key for recovery procedures.",
     )
